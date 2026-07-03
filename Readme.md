@@ -44,3 +44,9 @@ docker run -p 5000:5000 \
   --env-file .env \
   flask-o-shop
 ```
+
+# test card
+
+```
+4242 4242 4242 4242
+```

@@ -20,6 +20,14 @@ RUN pip install --upgrade pip setuptools wheel
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Install OpenTelemetry packages
+RUN pip install --no-cache-dir \
+    opentelemetry-distro \
+    opentelemetry-exporter-otlp \
+    opentelemetry-instrumentation-flask \
+    opentelemetry-instrumentation-sqlalchemy \
+    opentelemetry-instrumentation-requests
+
 # Copy the application
 COPY . .
 
@@ -29,5 +37,5 @@ ENV FLASK_ENV=development
 
 EXPOSE 5000
 
-CMD ["flask", "run", "--host=0.0.0.0", "--port=5000"]
+CMD ["opentelemetry-instrument", "flask", "run", "--host=0.0.0.0", "--port=5000"]
 
