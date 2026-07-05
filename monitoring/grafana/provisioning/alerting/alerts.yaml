@@ -164,45 +164,7 @@ groups:
               "action_required": "Link DB node to affected services"
             }
 
-      # 5. Redis down
-      - uid: "alert-redis-down"
-        title: "Redis down"
-        condition: C
-        data:
-          - refId: A
-            datasourceUid: prometheus-ds
-            relativeTimeRange: { from: 300, to: 0 }
-            model:
-              expr: 'up{job="redis"}'
-              refId: A
-          - refId: B
-            datasourceUid: __expr__
-            model:
-              type: reduce
-              refId: B
-              expression: A
-              reducer: last
-          - refId: C
-            datasourceUid: __expr__
-            model:
-              type: math
-              refId: C
-              expression: $B == 0
-        noDataState: Alerting
-        for: 1m
-        labels:
-          severity: high
-          component: cache
-        annotations:
-          summary: "Redis Cache is down"
-          description: "Redis is unreachable."
-          incident_payload: >
-            {
-              "incident_type": "redis_down",
-              "action_required": "Identify cache-dependent services"
-            }
-
-      # 6. External API slow
+      # 5. External API slow
       - uid: "alert-external-api-slow"
         title: "External API slow"
         condition: C
@@ -242,47 +204,7 @@ groups:
               "action_required": "Show dependency impact"
             }
 
-      # 7. Queue backlog
-      - uid: "alert-queue-backlog"
-        title: "Queue backlog"
-        condition: C
-        data:
-          - refId: A
-            datasourceUid: prometheus-ds
-            relativeTimeRange: { from: 300, to: 0 }
-            model:
-              expr: 'rabbitmq_queue_messages_ready{queue="tasks"}'
-              refId: A
-          - refId: B
-            datasourceUid: __expr__
-            model:
-              type: reduce
-              refId: B
-              expression: A
-              reducer: last
-          - refId: C
-            datasourceUid: __expr__
-            model:
-              type: math
-              refId: C
-              expression: $B > 1000
-        noDataState: OK
-        for: 5m
-        labels:
-          severity: medium
-          component: queue
-        annotations:
-          summary: "Queue backlog on {{ $labels.queue }}"
-          description: "Queue has {{ $values.B.Value | printf \"%.0f\" }} messages pending."
-          incident_payload: >
-            {
-              "incident_type": "queue_backlog",
-              "target_queue": "{{ $labels.queue }}",
-              "pending_messages": {{ $values.B.Value | printf "%.0f" }},
-              "action_required": "Identify stalled consumers"
-            }
-
-      # 8. CPU/Memory exhaustion
+      # 6. CPU/Memory exhaustion
       - uid: "alert-cpu-exhaustion"
         title: "CPU/Memory exhaustion"
         condition: C
@@ -322,7 +244,7 @@ groups:
               "action_required": "Correlate with service degradation"
             }
 
-      # 9. Payment success drop
+      # 7. Payment success drop
       - uid: "alert-payment-success-drop"
         title: "Payment success drop"
         condition: C

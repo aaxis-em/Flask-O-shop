@@ -1,0 +1,24 @@
+apiVersion: 1
+
+contactPoints:
+  - orgId: 1
+    name: PagerDuty-AI-Graph-Analyzer
+    receivers:
+      - uid: pd-receiver
+        type: pagerduty
+        settings:
+          integrationKey: $PAGERDUTY_INTEGRATION_KEY
+          class: "{{ .CommonLabels.severity }}"
+          component: "{{ .CommonLabels.component }}"
+          summary: "{{ .CommonAnnotations.summary }}"
+          customDetails:
+            incident_payload: "{{ .CommonAnnotations.incident_payload }}"
+            description: "{{ .CommonAnnotations.description }}"
+
+policies:
+  - orgId: 1
+    receiver: PagerDuty-AI-Graph-Analyzer
+    group_by: ['alertname', 'severity', 'component']
+    group_wait: 5s
+    group_interval: 1m
+    repeat_interval: 4h
