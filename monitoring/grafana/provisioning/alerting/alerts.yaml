@@ -1,0 +1,304 @@
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: "Flask-O-Shop Incidents"
+    folder: "Incident Response"
+    interval: 1m
+    rules:
+      # 1. Service down
+      - uid: "alert-service-down"
+        title: "Service down"
+        condition: C
+        data:
+          - refId: A
+            datasourceUid: prometheus-ds
+            relativeTimeRange: { from: 300, to: 0 }
+            model:
+              expr: 'up{job="flask-app"}'
+              refId: A
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              type: reduce
+              refId: B
+              expression: A
+              reducer: last
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: math
+              refId: C
+              expression: $B == 0
+        noDataState: Alerting
+        for: 1m
+        labels:
+          severity: critical
+          component: web
+        annotations:
+          summary: "Service down"
+          description: "Prometheus cannot scrape the Flask app metrics. The container might be down."
+
+      # 2. High latency
+      - uid: "alert-high-latency"
+        title: "High latency"
+        condition: C
+        data:
+          - refId: A
+            datasourceUid: prometheus-ds
+            relativeTimeRange: { from: 300, to: 0 }
+            model:
+              expr: 'histogram_quantile(0.95, sum(rate(http_server_duration_milliseconds_bucket{job="flask-app"}[5m])) by (le))'
+              refId: A
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              type: reduce
+              refId: B
+              expression: A
+              reducer: last
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: math
+              refId: C
+              expression: $B > 1000
+        noDataState: OK
+        for: 2m
+        labels:
+          severity: high
+          component: web
+        annotations:
+          summary: "High API Latency"
+          description: "p95 latency is over 1000ms. Use Jaeger traces to identify slow spans."
+
+      # 3. High 5xx rate
+      - uid: "alert-high-5xx"
+        title: "High 5xx rate"
+        condition: C
+        data:
+          - refId: A
+            datasourceUid: prometheus-ds
+            relativeTimeRange: { from: 300, to: 0 }
+            model:
+              expr: 'sum(rate(http_server_duration_milliseconds_count{job="flask-app", http_status_code=~"5.."}[5m])) / sum(rate(http_server_duration_milliseconds_count{job="flask-app"}[5m]))'
+              refId: A
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              type: reduce
+              refId: B
+              expression: A
+              reducer: last
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: math
+              refId: C
+              expression: $B > 0.05
+        noDataState: OK
+        for: 2m
+        labels:
+          severity: critical
+          component: web
+        annotations:
+          summary: "High 5xx Error Rate"
+          description: "More than 5% of requests are returning 5xx errors. Correlate with logs/traces."
+
+      # 4. Database slow
+      - uid: "alert-database-slow"
+        title: "Database slow"
+        condition: C
+        data:
+          - refId: A
+            datasourceUid: prometheus-ds
+            relativeTimeRange: { from: 300, to: 0 }
+            model:
+              expr: 'histogram_quantile(0.95, sum(rate(db_client_duration_milliseconds_bucket{job="flask-app"}[5m])) by (le))'
+              refId: A
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              type: reduce
+              refId: B
+              expression: A
+              reducer: last
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: math
+              refId: C
+              expression: $B > 500
+        noDataState: OK
+        for: 2m
+        labels:
+          severity: high
+          component: database
+        annotations:
+          summary: "Database queries are slow"
+          description: "p95 database query latency is over 500ms. Link DB node to affected services."
+
+      # 5. Redis down
+      - uid: "alert-redis-down"
+        title: "Redis down"
+        condition: C
+        data:
+          - refId: A
+            datasourceUid: prometheus-ds
+            relativeTimeRange: { from: 300, to: 0 }
+            model:
+              expr: 'up{job="redis"}'
+              refId: A
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              type: reduce
+              refId: B
+              expression: A
+              reducer: last
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: math
+              refId: C
+              expression: $B == 0
+        noDataState: Alerting
+        for: 1m
+        labels:
+          severity: high
+          component: cache
+        annotations:
+          summary: "Redis Cache is down"
+          description: "Redis is unreachable. Identify cache-dependent services."
+
+      # 6. External API slow
+      - uid: "alert-external-api-slow"
+        title: "External API slow"
+        condition: C
+        data:
+          - refId: A
+            datasourceUid: prometheus-ds
+            relativeTimeRange: { from: 300, to: 0 }
+            model:
+              expr: 'histogram_quantile(0.95, sum(rate(http_client_duration_milliseconds_bucket{job="flask-app"}[5m])) by (le, http_url))'
+              refId: A
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              type: reduce
+              refId: B
+              expression: A
+              reducer: last
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: math
+              refId: C
+              expression: $B > 2000
+        noDataState: OK
+        for: 2m
+        labels:
+          severity: high
+          component: external
+        annotations:
+          summary: "External API requests are slow"
+          description: "p95 latency to external APIs (e.g. Stripe) is over 2000ms. Show dependency impact."
+
+      # 7. Queue backlog
+      - uid: "alert-queue-backlog"
+        title: "Queue backlog"
+        condition: C
+        data:
+          - refId: A
+            datasourceUid: prometheus-ds
+            relativeTimeRange: { from: 300, to: 0 }
+            model:
+              expr: 'rabbitmq_queue_messages_ready{queue="tasks"}'
+              refId: A
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              type: reduce
+              refId: B
+              expression: A
+              reducer: last
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: math
+              refId: C
+              expression: $B > 1000
+        noDataState: OK
+        for: 5m
+        labels:
+          severity: medium
+          component: queue
+        annotations:
+          summary: "Message queue backlog"
+          description: "More than 1000 messages waiting in the queue. Identify stalled consumers."
+
+      # 8. CPU/Memory exhaustion
+      - uid: "alert-cpu-exhaustion"
+        title: "CPU/Memory exhaustion"
+        condition: C
+        data:
+          - refId: A
+            datasourceUid: prometheus-ds
+            relativeTimeRange: { from: 300, to: 0 }
+            model:
+              expr: 'rate(process_cpu_seconds_total{job="flask-app"}[5m])'
+              refId: A
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              type: reduce
+              refId: B
+              expression: A
+              reducer: last
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: math
+              refId: C
+              expression: $B > 0.8
+        noDataState: OK
+        for: 5m
+        labels:
+          severity: medium
+          component: infra
+        annotations:
+          summary: "High CPU Usage"
+          description: "CPU usage is consistently above 80%. Correlate with service degradation."
+
+      # 9. Payment success drop
+      - uid: "alert-payment-success-drop"
+        title: "Payment success drop"
+        condition: C
+        data:
+          - refId: A
+            datasourceUid: prometheus-ds
+            relativeTimeRange: { from: 600, to: 0 }
+            model:
+              expr: 'sum(rate(http_server_duration_milliseconds_count{job="flask-app", http_target="/payment_success"}[10m]))'
+              refId: A
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              type: reduce
+              refId: B
+              expression: A
+              reducer: last
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: math
+              refId: C
+              expression: $B == 0
+        noDataState: Alerting
+        for: 5m
+        labels:
+          severity: critical
+          component: billing
+        annotations:
+          summary: "Zero Payment Successes"
+          description: "No successful payments detected in the last 10 minutes. Estimate business impact."
