@@ -36,8 +36,14 @@ groups:
           severity: critical
           component: web
         annotations:
-          summary: "Service down"
-          description: "Prometheus cannot scrape the Flask app metrics. The container might be down."
+          summary: "Service {{ $labels.job }} is down"
+          description: "Prometheus cannot scrape the Flask app metrics."
+          incident_payload: >
+            {
+              "incident_type": "service_down",
+              "target_service": "{{ $labels.job }}",
+              "action_required": "Find dependent services"
+            }
 
       # 2. High latency
       - uid: "alert-high-latency"
@@ -48,7 +54,7 @@ groups:
             datasourceUid: prometheus-ds
             relativeTimeRange: { from: 300, to: 0 }
             model:
-              expr: 'histogram_quantile(0.95, sum(rate(http_server_duration_milliseconds_bucket{job="flask-app"}[5m])) by (le))'
+              expr: 'histogram_quantile(0.95, sum(rate(http_server_duration_milliseconds_bucket{job="flask-app"}[5m])) by (le, http_target))'
               refId: A
           - refId: B
             datasourceUid: __expr__
@@ -69,8 +75,15 @@ groups:
           severity: high
           component: web
         annotations:
-          summary: "High API Latency"
-          description: "p95 latency is over 1000ms. Use Jaeger traces to identify slow spans."
+          summary: "High API Latency on {{ $labels.http_target }}"
+          description: "p95 latency is {{ $values.B.Value | printf \"%.0f\" }}ms (Threshold > 1000ms)."
+          incident_payload: >
+            {
+              "incident_type": "high_latency",
+              "target_endpoint": "{{ $labels.http_target }}",
+              "current_latency_ms": {{ $values.B.Value | printf "%.0f" }},
+              "action_required": "Use Jaeger traces to identify slow spans"
+            }
 
       # 3. High 5xx rate
       - uid: "alert-high-5xx"
@@ -81,7 +94,7 @@ groups:
             datasourceUid: prometheus-ds
             relativeTimeRange: { from: 300, to: 0 }
             model:
-              expr: 'sum(rate(http_server_duration_milliseconds_count{job="flask-app", http_status_code=~"5.."}[5m])) / sum(rate(http_server_duration_milliseconds_count{job="flask-app"}[5m]))'
+              expr: 'sum by (http_target) (rate(http_server_duration_milliseconds_count{job="flask-app", http_status_code=~"5.."}[5m])) / sum by (http_target) (rate(http_server_duration_milliseconds_count{job="flask-app"}[5m]))'
               refId: A
           - refId: B
             datasourceUid: __expr__
@@ -102,8 +115,15 @@ groups:
           severity: critical
           component: web
         annotations:
-          summary: "High 5xx Error Rate"
-          description: "More than 5% of requests are returning 5xx errors. Correlate with logs/traces."
+          summary: "High 5xx Error Rate on {{ $labels.http_target }}"
+          description: "Error rate is {{ $values.B.Value | printf \"%.2f\" }} (Threshold > 0.05)."
+          incident_payload: >
+            {
+              "incident_type": "high_5xx_rate",
+              "target_endpoint": "{{ $labels.http_target }}",
+              "error_rate": {{ $values.B.Value | printf "%.2f" }},
+              "action_required": "Correlate with logs/traces"
+            }
 
       # 4. Database slow
       - uid: "alert-database-slow"
@@ -136,7 +156,13 @@ groups:
           component: database
         annotations:
           summary: "Database queries are slow"
-          description: "p95 database query latency is over 500ms. Link DB node to affected services."
+          description: "p95 database query latency is {{ $values.B.Value | printf \"%.0f\" }}ms."
+          incident_payload: >
+            {
+              "incident_type": "database_slow",
+              "current_latency_ms": {{ $values.B.Value | printf "%.0f" }},
+              "action_required": "Link DB node to affected services"
+            }
 
       # 5. Redis down
       - uid: "alert-redis-down"
@@ -169,7 +195,12 @@ groups:
           component: cache
         annotations:
           summary: "Redis Cache is down"
-          description: "Redis is unreachable. Identify cache-dependent services."
+          description: "Redis is unreachable."
+          incident_payload: >
+            {
+              "incident_type": "redis_down",
+              "action_required": "Identify cache-dependent services"
+            }
 
       # 6. External API slow
       - uid: "alert-external-api-slow"
@@ -201,8 +232,15 @@ groups:
           severity: high
           component: external
         annotations:
-          summary: "External API requests are slow"
-          description: "p95 latency to external APIs (e.g. Stripe) is over 2000ms. Show dependency impact."
+          summary: "External API {{ $labels.http_url }} is slow"
+          description: "p95 latency is {{ $values.B.Value | printf \"%.0f\" }}ms."
+          incident_payload: >
+            {
+              "incident_type": "external_api_slow",
+              "target_url": "{{ $labels.http_url }}",
+              "current_latency_ms": {{ $values.B.Value | printf "%.0f" }},
+              "action_required": "Show dependency impact"
+            }
 
       # 7. Queue backlog
       - uid: "alert-queue-backlog"
@@ -234,8 +272,15 @@ groups:
           severity: medium
           component: queue
         annotations:
-          summary: "Message queue backlog"
-          description: "More than 1000 messages waiting in the queue. Identify stalled consumers."
+          summary: "Queue backlog on {{ $labels.queue }}"
+          description: "Queue has {{ $values.B.Value | printf \"%.0f\" }} messages pending."
+          incident_payload: >
+            {
+              "incident_type": "queue_backlog",
+              "target_queue": "{{ $labels.queue }}",
+              "pending_messages": {{ $values.B.Value | printf "%.0f" }},
+              "action_required": "Identify stalled consumers"
+            }
 
       # 8. CPU/Memory exhaustion
       - uid: "alert-cpu-exhaustion"
@@ -267,8 +312,15 @@ groups:
           severity: medium
           component: infra
         annotations:
-          summary: "High CPU Usage"
-          description: "CPU usage is consistently above 80%. Correlate with service degradation."
+          summary: "High CPU Usage on {{ $labels.job }}"
+          description: "CPU usage is {{ $values.B.Value | printf \"%.2f\" }}."
+          incident_payload: >
+            {
+              "incident_type": "cpu_exhaustion",
+              "target_service": "{{ $labels.job }}",
+              "cpu_rate": {{ $values.B.Value | printf "%.2f" }},
+              "action_required": "Correlate with service degradation"
+            }
 
       # 9. Payment success drop
       - uid: "alert-payment-success-drop"
@@ -301,4 +353,10 @@ groups:
           component: billing
         annotations:
           summary: "Zero Payment Successes"
-          description: "No successful payments detected in the last 10 minutes. Estimate business impact."
+          description: "No successful payments detected in the last 10 minutes."
+          incident_payload: >
+            {
+              "incident_type": "payment_success_drop",
+              "target_endpoint": "/payment_success",
+              "action_required": "Estimate business impact"
+            }
