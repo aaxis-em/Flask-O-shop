@@ -7,7 +7,7 @@ contactPoints:
       - uid: pd-receiver
         type: pagerduty
         settings:
-          integrationKey: "${PAGERDUTY_INTEGRATION_KEY:-paste_your_key_here}"
+          integrationKey: "YOUR_32_CHAR_PAGERDUTY_KEY_HERE_"
           class: "{{ .CommonLabels.severity }}"
           component: "{{ .CommonLabels.component }}"
           summary: "{{ .CommonAnnotations.summary }}"
